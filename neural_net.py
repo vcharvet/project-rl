@@ -100,6 +100,87 @@ class DoubleQNetwork:
 
 
 
+class A2CPolicy(object):
+    def __init__(self, env, img_shape, id, h_size, out_size, lr):
+        img_row, img_col, nb_channels = img_shape
+
+        # self.pd_type = make_pdtype(env.action_space.n)
+
+        # input is a tensor of dimension 3
+        self.X = tf.placeholder(shape=[None, img_row, img_col, nb_channels],
+                                dtype=tf.float32)
+        self.targetQ = tf.placeholder(dtype=tf.float32)
+        self.action = tf.placeholder(shape=None, dtype=tf.int32)
+        self.actions_onehot = tf.one_hot(self.action, env.action_space.n,
+                                         dtype=tf.float32)
+
+
+        self.conv1 = tf.layers.conv2d(inputs=self.X,
+                                      filters=h_size,
+                                      kernel_size=[7, 7],
+                                      strides=[3, 3],
+                                      padding='SAME',
+                                      kernel_initializer=xavier_initializer(),
+                                      name='conv1'+id)
+        self.a1 = tf.layers.batch_normalization(tf.nn.dropout(self.conv1, 0.5))
+        self.z1 = tf.nn.relu(self.a1, name='a1'+id)
+
+        self.conv2 = tf.layers.conv2d(self.z1,
+                                      filters=2*h_size,
+                                      kernel_size=[5, 5],
+                                      strides=[2, 2],
+                                      padding='SAME',
+                                      kernel_initializer=xavier_initializer(),
+                                      name='conv2'+id)
+        self.a2 = tf.layers.batch_normalization(tf.nn.dropout(self.conv2, 0.5))
+        self.z2 = tf.nn.relu(self.a2, name='a2'+id)
+
+        self.conv3 = tf.layers.conv2d(self.z2,
+                                      filters=h_size,
+                                      kernel_size=[3, 3],
+                                      strides=[1, 1],
+                                      padding='SAME',
+                                      name='conv3'+id)
+        self.a3 = tf.layers.batch_normalization(tf.nn.dropout(self.conv3, 0.5))
+        self.z3 = tf.nn.relu(self.a3, name='z3'+id)
+
+        self.conv4 = tf.layers.conv2d(self.z3,
+                                      filters=h_size,
+                                      kernel_size=[3, 3],
+                                      strides=[1, 1],
+                                      padding='SAME',
+                                      kernel_initializer=xavier_initializer(),
+                                      name='conv4'+id)
+        self.a4 = tf.layers.batch_normalization(tf.nn.dropout(self.conv4, 0.5))
+        self.z4 = tf.nn.relu(self.a4, name='z4'+id)
+
+        self.flatten = tf.layers.flatten(self.z4)
+
+        self.fc_common = tf.layers.dense(self.flatten,
+                                         units=out_size,
+                                         activation='relu')
+
+        # self.pd, self.pi = self.pd_type.pdfromlatent(self.fc_common,
+        #                                              init_scale=0.1)
+        self.AW = tf.layers.dense(self.fc_common, env.action_space.n,
+                                  kernel_initializer=xavier_initializer())
+        self.action_probs = tf.squeeze(tf.nn.softmax(self.AW))
+        self.picked_action_probs = tf.gather(self.action_probs, self.action)
+
+        self.value_estim = tf.layers.dense(inputs=self.fc_common, units=1,
+                                           activation=None,
+                                           kernel_initializer=xavier_initializer(),
+                                           name='Value' + id)[:, 0]
+
+        self.actor_loss = -tf.log(self.picked_action_probs) * self.targetQ
+        self.critic_loss = (self.value_estim - self.targetQ) ** 2
+
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=lr)
+
+        self.train_actor = self.optimizer.minimize(self.actor_loss)
+        self.train_critic = self.optimizer.minimize(self.critic_loss)
+
+
 
 
 
