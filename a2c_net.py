@@ -27,12 +27,12 @@ class ActorCritic(object):
         # input is a tensor of dimension 3
         self.X = tf.placeholder(shape=[None, img_row, img_col, nb_channels],
                                 dtype=tf.float32)
-        self.td_error = tf.placeholder(dtype=tf.float32)
-        self.value_next = tf.placeholder(dtype=tf.float32)
-        self.reward = tf.placeholder(dtype=tf.float32)
-        self.action = tf.placeholder(shape=None, dtype=tf.int32)
-        self.actions_onehot = tf.one_hot(self.action, env.action_space.n,
-                                         dtype=tf.float32)
+        self.td_error = tf.placeholder(shape=[None], dtype=tf.float32)
+        self.value_next = tf.placeholder(shape=[None], dtype=tf.float32)
+        self.reward = tf.placeholder(shape=[None], dtype=tf.float32)
+        self.action = tf.placeholder(shape=[None], dtype=tf.int32)
+        # self.actions_onehot = tf.one_hot(self.action, env.action_space.n,
+        #                                  dtype=tf.float32)
 
         #building common input layers to extract image features
         self.conv1 = conv_layer(self.X, h_size, 7, 3)
@@ -63,12 +63,13 @@ class ActorCritic(object):
 
         self.value_estim = dense_layer(self.fc_out, 1)
 
-        picked_action_prob = tf.gather(self.action_probs, self.action)
-        self.actor_loss = tf.reduce_mean(-tf.log(picked_action_prob) * self.td_error)
+        picked_action_prob = tf.gather(self.action_probs, self.action, axis=1)
+        self.actor_loss = tf.reduce_mean(-tf.log(picked_action_prob) * self.td_error, axis=1)
         self.train_actor = self.optimizer.minimize(self.actor_loss)
 
-        self.td_err_out = tf.squeeze(self.reward + gamma * self.value_next - self.value_estim)
-        self.critic_loss = self.td_err_out ** 2
+        self.td_err_out = tf.reduce_mean(self.reward + gamma * self.value_next - self.value_estim,
+                                         axis=1)
+        self.critic_loss = (self.td_err_out ** 2)
         self.train_critic = self.optimizer.minimize(self.critic_loss)
         # self.sess.run(tf.global_variables_initializer())
         # self.sess.run(tf.local_variables_initializer())

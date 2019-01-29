@@ -78,28 +78,54 @@ def actor_critic(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
             if render:
                 env.render()
 
-            s1 = s1.reshape((-1, img_shape[0], img_shape[1], img_shape[2]))
-            s = s.reshape((-1, img_shape[0], img_shape[1], img_shape[2]))
+            #with experience replay:
+            if total_steps % update_freq == 0:
+                train_batch = my_buffer.sample(batch_size)
 
-            # td_error = criticNet.learn_critic(s, r, s1)
-            # actor_loss = actorNet.learn_actor(s, a, td_error)
-            value_next = sess.run(ACNet.value_estim,
-                                  {ACNet.X: s1})
-            td_err, _ = sess.run([ACNet.td_err_out,
-                                  ACNet.train_critic],
-                                 {ACNet.X: s,
-                                  ACNet.reward: r,
-                                  ACNet.value_next: value_next})
-            actor_loss, _ = sess.run([ACNet.actor_loss,
-                                      ACNet.train_actor],
-                                     {ACNet.X: s,
-                                      ACNet.action: a,
-                                      ACNet.td_error: td_err})
+                states = np.vstack(train_batch[:, 3]).reshape(
+                    (batch_size, img_shape[0],
+                    img_shape[1], img_shape[2]))
+                old_states = np.vstack(train_batch[:, 0]).reshape(
+                    (batch_size, img_shape[0],
+                    img_shape[1], img_shape[2]))
+
+                values_next = sess.run(ACNet.value_estim,
+                                       {ACNet.X: states}).flatten()
+
+                td_err, _ = sess.run([ACNet.td_err_out,
+                                      ACNet.train_critic],
+                                     {ACNet.X: states,
+                                      ACNet.reward: train_batch[:, 2],
+                                      ACNet.value_next: values_next})
+
+                actor_loss, _ = sess.run([ACNet.actor_loss,
+                                          ACNet.train_actor],
+                                         {ACNet.X: old_states,
+                                          ACNet.action: train_batch[:, 1],
+                                          ACNet.td_error: td_err})
+                if total_steps % verbosity == 0:
+                    print('Total step {}: actor_loss={:.3f} - td_error={:.3f}'\
+                          .format(total_steps, actor_loss[0], td_err[0]))
+            # for 1-step update (no replay)
+            # s1 = s1.reshape((-1, img_shape[0], img_shape[1], img_shape[2]))
+            # s = s.reshape((-1, img_shape[0], img_shape[1], img_shape[2]))
+            # value_next = sess.run(ACNet.value_estim,
+            #                       {ACNet.X: s1})
+            # td_err, _ = sess.run([ACNet.td_err_out,
+            #                       ACNet.train_critic],
+            #                      {ACNet.X: s,
+            #                       ACNet.reward: r,
+            #                       ACNet.value_next: value_next})
+            # actor_loss, _ = sess.run([ACNet.actor_loss,
+            #                           ACNet.train_actor],
+            #                          {ACNet.X: s,
+            #                           ACNet.action: a,
+            #                           ACNet.td_error: td_err})
 
             # print(td_err, actor_loss)
-            if total_steps % verbosity == 0:
-                    print('Total step {}: actor_loss={:.3f} - td_error={:.3f}'\
-                          .format(total_steps, actor_loss, td_err))
+            # if total_steps % verbosity == 0:
+            #         print('Total step {}: actor_loss={:.3f} - td_error={:.3f}'\
+            #               .format(total_steps, actor_loss, td_err))
 
             if d:
                 print('Arriving on terminal state in iteration {}'.format(i))
