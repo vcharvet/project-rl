@@ -16,7 +16,7 @@ class DoubleQNetwork:
         # input is a tensor of dimension 3
         self.X = tf.placeholder(shape=[None, img_row, img_col, nb_channels], dtype=tf.float32)
 
-        self.conv1 = tf.layers.conv2d(inputs=self.X,
+        self.conv1 = tf.layers.conv2d(inputs=self.X / 255.,
                                       filters=h_size,
                                       kernel_size=[7, 7],
                                       strides=[3, 3],
@@ -56,21 +56,23 @@ class DoubleQNetwork:
         self.z4 = tf.nn.relu(self.a4, name='z4'+id)
 
         # splitting the network for DDQN
-        self.streamA = tf.layers.flatten(self.z4)
-        self.streamV = tf.layers.flatten(self.z4)
-        self.AW = tf.layers.dense(inputs=self.streamA, units=out_size,
+        self.streamA = tf.layers.batch_normalization(tf.layers.flatten(self.z4))
+        self.streamV = tf.layers.batch_normalization(tf.layers.flatten(self.z4))
+        AW = tf.layers.dense(inputs=self.streamA, units=out_size,
                                   activation=tf.nn.relu,
                                   kernel_initializer=xavier_initializer(),
                                   name='AW'+id)
+        self.AW = tf.layers.batch_normalization(AW)
         self.Advantage = tf.layers.dense(inputs=self.AW, units=env.action_space.n,
                                          activation=None,
                                          kernel_initializer=xavier_initializer(),
                                          name='Advantage'+id)
 
-        self.VW = tf.layers.dense(inputs=self.streamV, units=out_size,
+        VW = tf.layers.dense(inputs=self.streamV, units=out_size,
                                   activation=tf.nn.relu,
                                   kernel_initializer=xavier_initializer(),
                                   name='VW'+id)
+        self.VW = tf.layers.batch_normalization(VW)
         self.Value = tf.layers.dense(inputs=self.VW, units=1,
                                      activation=None,
                                      kernel_initializer=xavier_initializer(),

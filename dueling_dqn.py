@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import pandas as pd
 
 from neural_net import DoubleQNetwork
 from buffer import experience_buffer
@@ -24,10 +25,10 @@ def update_target(op_holder, sess):
 
 
 def train_double_dqn(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
-                     startE=0.7,endE=0.95, annealing_steps=1000,
+                     startE=0.7, endE=0.95, annealing_steps=1000,
                      num_episodes=10000, max_ep_length=50,
-                     pre_train_steps=10,
-                     load_model=False, save_path='./data/dqn',
+                     pre_train_steps=10, checkpoint=50,
+                     load_model=False, save_path='models/ddqn/',
                      lr=0.0001, h_size=64, out_size=64, render=False,
                      verbosity=20, tau=0.001):
     tf.reset_default_graph()
@@ -68,6 +69,7 @@ def train_double_dqn(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
                 j+=1
                 a = np.random.randint(0, env.action_space.n)
 
+                s, _, _, _ = env.step(a)
                 s1, r, d, info = env.step(a)
                 # s1 = s1.reshape((-1, img_shape[0], img_shape[1], img_shape[2]))
                 episode_buffer.add(np.reshape(np.array([s, a, r, s1, d]), [1, 5]))
@@ -112,7 +114,7 @@ def train_double_dqn(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
                          img_shape[1], img_shape[2]))
                     Q1 = sess.run(mainQN.predict,
                                   feed_dict={mainQN.X: states})
-                    Q2 = sess.run(targetQN.Qout,
+                    Q2 = sess.run(targetQN.Qout,            #targetQN
                                   feed_dict={targetQN.X: states})
                     end_multiplier = -(train_batch[:, 4] - 1)
                     doubleQ = Q2[:batch_size, Q1]
@@ -127,10 +129,12 @@ def train_double_dqn(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
                                            {mainQN.X: old_states,
                                             mainQN.targetQ: targetQ,
                                             mainQN.actions: train_batch[:, 1]})
+                    if total_steps % (verbosity*5) == 0:
+                        print('Total step {} loss={:.3}'.format(total_steps, loss))
                     # print('Step {} on iter {}: need to update the main model '
                     #       'with loss={:.3f}'.format(j, i, loss))
 
-                    update_target(target_ops, sess)
+                    # update_target(target_ops, sess)
                 rAll+=r
                 if d:
                     print('Arriving on terminal state in iteration {}'.format(i))
@@ -144,6 +148,11 @@ def train_double_dqn(env, img_shape, batch_size=32, update_freq=4,  y=0.99,
             if i % verbosity == 0:
                 print('On iteration {} mean return={:.3f} ---- total '
                       'steps:{}'.format(i, sum(rList)/(i+1), total_steps))
+            if (i+1)%checkpoint == 0:
+                path = saver.save(sess, save_path)
+                print('Model saved in path: {}'.format(path))
+                df = pd.DataFrame([jList, rList], index=['j', 'reward']).T
+                df.to_csv('models/ddqn/rewards.csv', sep=';')
     return jList, rList, num_episodes
 
 
